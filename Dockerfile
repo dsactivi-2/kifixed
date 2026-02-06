@@ -3,8 +3,8 @@ FROM node:20-alpine
 # Arbeitsverzeichnis setzen
 WORKDIR /app
 
-# curl fuer Health-Checks installieren
-RUN apk add --no-cache curl bash
+# curl + postgresql-client fuer Health-Checks installieren
+RUN apk add --no-cache curl bash postgresql-client
 
 # Package-Dateien kopieren und Dependencies installieren
 COPY server/package.json server/package-lock.json* ./

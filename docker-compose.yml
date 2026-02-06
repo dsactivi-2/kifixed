@@ -1,35 +1,5 @@
 services:
   # -------------------------------------------------------
-  # Ollama - LLM Runtime (GLM-4 Model)
-  # -------------------------------------------------------
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama-glm4
-    restart: unless-stopped
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-    # GPU-Unterstuetzung (auskommentieren falls keine GPU vorhanden)
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
-    networks:
-      - agent-network
-
-  # -------------------------------------------------------
   # PostgreSQL - Conversation & Memory Storage
   # -------------------------------------------------------
   postgres:
@@ -37,7 +7,7 @@ services:
     container_name: agents-postgres
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-agents}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agents123}
@@ -55,6 +25,7 @@ services:
 
   # -------------------------------------------------------
   # Agent Server - Node.js Express API
+  # Verbindet sich mit Ollama Cloud (https://api.ollama.com)
   # -------------------------------------------------------
   agent-server:
     build:
@@ -63,9 +34,15 @@ services:
     container_name: agent-server
     restart: unless-stopped
     ports:
-      - "${PORT:-3939}:3939"
+      - "4040:3939"
+    env_file:
+      - .env
     environment:
-      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_HOST: "https://api.ollama.com"
+      OLLAMA_API_KEY: "1922e206df9441f992a4f4571e70ce28.cYqGuCgLOXaLtWUs-56j8SL4"
+      OLLAMA_MODEL: glm-4.7
+      GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+      LINEAR_API_KEY: "${LINEAR_API_KEY:-}"
       POSTGRES_USER: ${POSTGRES_USER:-agents}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agents123}
       POSTGRES_DB: ${POSTGRES_DB:-agent_db}
@@ -73,10 +50,7 @@ services:
       POSTGRES_PORT: 5432
       PORT: 3939
       NODE_ENV: ${NODE_ENV:-production}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-glm4}
     depends_on:
-      ollama:
-        condition: service_healthy
       postgres:
         condition: service_healthy
     volumes:
@@ -110,8 +84,6 @@ services:
       - agent-network
 
 volumes:
-  ollama_data:
-    driver: local
   postgres_data:
     driver: local
 

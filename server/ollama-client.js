@@ -1,23 +1,25 @@
 const axios = require('axios');
 
-const OLLAMA_HOST = process.env.OLLAMA_HOST || 'http://localhost:11434';
+const OLLAMA_HOST = process.env.OLLAMA_HOST || 'https://api.ollama.com';
+const OLLAMA_API_KEY = process.env.OLLAMA_API_KEY || '';
 const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'glm4';
+
+// Headers mit API Key (Bearer Auth fuer Ollama Cloud)
+const headers = { 'Content-Type': 'application/json' };
+if (OLLAMA_API_KEY) {
+  headers['Authorization'] = `Bearer ${OLLAMA_API_KEY}`;
+}
 
 // Axios-Instanz mit erhoehtem Timeout (LLM-Antworten dauern)
 const client = axios.create({
   baseURL: OLLAMA_HOST,
   timeout: 300000, // 5 Minuten Timeout fuer lange Antworten
-  headers: { 'Content-Type': 'application/json' },
+  headers,
 });
 
 /**
- * Chat-Completion ueber Ollama API.
+ * Chat-Completion ueber Ollama Cloud API.
  * Sendet Nachrichten-Array und gibt die Antwort zurueck.
- *
- * @param {string} model - Modell-Name (z.B. "glm4")
- * @param {Array<{role: string, content: string}>} messages - Chat-Verlauf
- * @param {Object} options - Zusaetzliche Optionen (temperature, etc.)
- * @returns {Promise<{message: {role: string, content: string}, model: string, total_duration: number}>}
  */
 async function chat(model, messages, options = {}) {
   const payload = {
@@ -46,7 +48,6 @@ async function chat(model, messages, options = {}) {
 
 /**
  * Verfuegbare Modelle auflisten.
- * @returns {Promise<Array<{name: string, size: number, modified_at: string}>>}
  */
 async function listModels() {
   try {
@@ -58,29 +59,7 @@ async function listModels() {
 }
 
 /**
- * Modell herunterladen/aktualisieren.
- * @param {string} name - Modell-Name (z.B. "glm4")
- * @returns {Promise<void>}
- */
-async function pullModel(name) {
-  try {
-    console.log(`[Ollama] Pulling model: ${name} ...`);
-    const response = await client.post(
-      '/api/pull',
-      { name, stream: false },
-      { timeout: 3600000 } // 1 Stunde fuer grosse Modelle
-    );
-    console.log(`[Ollama] Model ${name} pull complete`);
-    return response.data;
-  } catch (err) {
-    throw new Error(`Ollama pullModel error: ${err.message}`);
-  }
-}
-
-/**
  * Pruefen ob ein bestimmtes Modell verfuegbar ist.
- * @param {string} modelName - Modell-Name
- * @returns {Promise<boolean>}
  */
 async function isModelAvailable(modelName) {
   try {
@@ -94,8 +73,7 @@ async function isModelAvailable(modelName) {
 }
 
 /**
- * Health-Check: Ist Ollama erreichbar?
- * @returns {Promise<{connected: boolean, models: number, hasGlm4: boolean}>}
+ * Health-Check: Ist Ollama Cloud erreichbar?
  */
 async function healthCheck() {
   try {
@@ -105,48 +83,125 @@ async function healthCheck() {
     );
     return {
       connected: true,
+      cloud: true,
+      host: OLLAMA_HOST,
       models: models.length,
       hasGlm4,
       modelList: models.map((m) => m.name),
     };
   } catch (err) {
-    return { connected: false, error: err.message, models: 0, hasGlm4: false };
+    return { connected: false, cloud: true, host: OLLAMA_HOST, error: err.message, models: 0, hasGlm4: false };
   }
 }
 
 /**
- * Warte bis Ollama bereit ist (retry mit exponential backoff).
- * @param {number} maxRetries - Maximale Versuche
- * @param {number} initialDelay - Start-Wartezeit in ms
- * @returns {Promise<boolean>}
+ * Warte bis Ollama Cloud erreichbar ist (retry mit backoff).
  */
-async function waitForOllama(maxRetries = 30, initialDelay = 2000) {
+async function waitForOllama(maxRetries = 15, initialDelay = 3000) {
   let delay = initialDelay;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       await client.get('/api/tags');
-      console.log(`[Ollama] Verbindung hergestellt (Versuch ${attempt})`);
+      console.log(`[Ollama Cloud] Verbindung hergestellt (Versuch ${attempt})`);
       return true;
     } catch {
       console.log(
-        `[Ollama] Warte auf Ollama... (Versuch ${attempt}/${maxRetries})`
+        `[Ollama Cloud] Warte auf ${OLLAMA_HOST}... (Versuch ${attempt}/${maxRetries})`
       );
       await new Promise((resolve) => setTimeout(resolve, delay));
-      delay = Math.min(delay * 1.5, 15000); // Max 15s zwischen Versuchen
+      delay = Math.min(delay * 1.5, 15000);
     }
   }
 
-  console.error('[Ollama] Konnte keine Verbindung herstellen!');
+  console.error('[Ollama Cloud] Konnte keine Verbindung herstellen!');
   return false;
+}
+
+/**
+ * Chat-Completion mit Streaming ueber Ollama Cloud API.
+ * Gibt einen Stream zurueck, der einzelne Text-Chunks liefert.
+ * @returns {Promise<{stream: ReadableStream, abort: Function}>}
+ */
+async function chatStream(model, messages, options = {}) {
+  const payload = {
+    model: model || DEFAULT_MODEL,
+    messages,
+    stream: true,
+    options: {
+      temperature: options.temperature ?? 0.7,
+      num_predict: options.maxTokens ?? 4096,
+      top_p: options.topP ?? 0.9,
+      ...(options.ollamaOptions || {}),
+    },
+  };
+
+  const controller = new AbortController();
+  const fetchHeaders = { 'Content-Type': 'application/json' };
+  if (OLLAMA_API_KEY) {
+    fetchHeaders['Authorization'] = `Bearer ${OLLAMA_API_KEY}`;
+  }
+
+  try {
+    const response = await fetch(`${OLLAMA_HOST}/api/chat`, {
+      method: 'POST',
+      headers: fetchHeaders,
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Ollama stream error (${response.status}): ${errorText}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    const stream = new ReadableStream({
+      async start(streamController) {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n').filter(line => line.trim());
+
+            for (const line of lines) {
+              try {
+                const json = JSON.parse(line);
+                if (json.message?.content) {
+                  streamController.enqueue(json.message.content);
+                }
+              } catch (e) {
+                // Ignoriere ungueltige JSON-Zeilen
+              }
+            }
+          }
+          streamController.close();
+        } catch (error) {
+          streamController.error(error);
+        }
+      },
+    });
+
+    return {
+      stream,
+      abort: () => controller.abort(),
+    };
+  } catch (err) {
+    throw new Error(`Ollama stream connection error: ${err.message}`);
+  }
 }
 
 module.exports = {
   chat,
+  chatStream,
   listModels,
-  pullModel,
   isModelAvailable,
   healthCheck,
   waitForOllama,
   DEFAULT_MODEL,
+  client,
 };

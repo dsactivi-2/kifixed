@@ -1,0 +1,2346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Agent Server - Chat UI</title>
+<style>
+  :root {
+    --bg-primary: #0d1117;
+    --bg-sidebar: #161b22;
+    --bg-card: #21262d;
+    --bg-input: #0d1117;
+    --accent: #58a6ff;
+    --accent-hover: #79b8ff;
+    --accent-dim: rgba(88, 166, 255, 0.15);
+    --text-primary: #c9d1d9;
+    --text-secondary: #8b949e;
+    --text-muted: #484f58;
+    --border: #30363d;
+    --border-light: #21262d;
+    --green: #3fb950;
+    --red: #f85149;
+    --orange: #d29922;
+    --purple: #bc8cff;
+    --font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --transition: 0.2s ease;
+    --sidebar-width: 260px;
+    --right-panel-width: 320px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  /* Layout */
+  .app {
+    display: flex;
+    height: 100vh;
+    width: 100%;
+  }
+
+  /* Left Sidebar */
+  .sidebar {
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .sidebar-header .icon { font-size: 20px; }
+
+  .sidebar-search {
+    padding: 12px 16px;
+  }
+
+  .sidebar-search input {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    transition: border-color var(--transition);
+  }
+
+  .sidebar-search input:focus {
+    border-color: var(--accent);
+  }
+
+  .sidebar-search input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .agent-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+
+  .agent-group-title {
+    padding: 8px 16px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+  }
+
+  .agent-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: all var(--transition);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .agent-item:hover {
+    background: var(--bg-card);
+  }
+
+  .agent-item.active {
+    border-left-color: var(--accent);
+    background: var(--accent-dim);
+  }
+
+  .agent-item .agent-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .agent-item .agent-desc {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+  }
+
+  .sidebar-footer {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .settings-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+
+  .settings-btn:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border-color: var(--text-muted);
+  }
+
+  .settings-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* Center - Chat Area */
+  .chat-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .chat-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-sidebar);
+    min-height: 56px;
+  }
+
+  .chat-header-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .chat-header-name {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  .chat-header-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chat-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .conv-select {
+    padding: 6px 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+    max-width: 180px;
+  }
+
+  .btn {
+    padding: 6px 14px;
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+  }
+
+  .btn:hover { background: var(--accent-hover); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    padding: 6px 12px;
+  }
+
+  .btn-ghost:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+  }
+
+  /* Messages */
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .message {
+    max-width: 75%;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    animation: fadeIn 0.3s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .message.user {
+    align-self: flex-end;
+  }
+
+  .message.assistant {
+    align-self: flex-start;
+  }
+
+  .message-bubble {
+    padding: 10px 14px;
+    border-radius: var(--radius-lg);
+    font-size: 14px;
+    line-height: 1.5;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .message.user .message-bubble {
+    background: var(--accent);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+
+  .message.assistant .message-bubble {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-bottom-left-radius: 4px;
+  }
+
+  .message-bubble code {
+    background: rgba(0,0,0,0.3);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  .message-bubble pre {
+    background: #0d1117;
+    padding: 12px;
+    border-radius: var(--radius);
+    overflow-x: auto;
+    margin: 8px 0;
+    border: 1px solid var(--border);
+  }
+
+  .message-bubble pre code {
+    background: transparent;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .message-bubble h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 8px 0 4px;
+    color: var(--text-primary);
+  }
+
+  .message-bubble ul {
+    padding-left: 20px;
+    margin: 4px 0;
+  }
+
+  .message-bubble li {
+    margin: 2px 0;
+  }
+
+  .message-bubble a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .message-bubble a:hover {
+    text-decoration: underline;
+  }
+
+  .message-bubble strong {
+    font-weight: 600;
+    color: #e6edf3;
+  }
+
+  .message-time {
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 0 4px;
+  }
+
+  .message.user .message-time {
+    text-align: right;
+  }
+
+  /* Tools Used */
+  .tools-used {
+    margin-top: 6px;
+  }
+
+  .tools-toggle {
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 0;
+    background: none;
+    border: none;
+    font-family: var(--font);
+  }
+
+  .tools-toggle:hover { color: var(--text-secondary); }
+
+  .tools-toggle .arrow {
+    font-size: 10px;
+    transition: transform var(--transition);
+  }
+
+  .tools-toggle .arrow.open {
+    transform: rotate(90deg);
+  }
+
+  .tools-details {
+    display: none;
+    margin-top: 4px;
+    padding: 8px;
+    background: rgba(0,0,0,0.2);
+    border-radius: var(--radius);
+    font-size: 12px;
+  }
+
+  .tools-details.show { display: block; }
+
+  .tool-item {
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    color: var(--text-secondary);
+  }
+
+  .tool-item:last-child { border-bottom: none; }
+
+  .tool-item .tool-name {
+    color: var(--purple);
+    font-weight: 500;
+  }
+
+  /* Typing indicator */
+  .typing {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    border-bottom-left-radius: 4px;
+    align-self: flex-start;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .typing-dots {
+    display: flex;
+    gap: 3px;
+  }
+
+  .typing-dots span {
+    width: 6px;
+    height: 6px;
+    background: var(--text-muted);
+    border-radius: 50%;
+    animation: typingBounce 1.4s infinite;
+  }
+
+  .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes typingBounce {
+    0%, 60%, 100% { transform: translateY(0); }
+    30% { transform: translateY(-4px); }
+  }
+
+  /* Chat Input */
+  .chat-input-area {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-sidebar);
+  }
+
+  .chat-input-wrapper {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 8px 12px;
+    transition: border-color var(--transition);
+  }
+
+  .chat-input-wrapper:focus-within {
+    border-color: var(--accent);
+  }
+
+  .chat-input-wrapper textarea {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: var(--font);
+    resize: none;
+    outline: none;
+    min-height: 24px;
+    max-height: 200px;
+    line-height: 1.5;
+  }
+
+  .chat-input-wrapper textarea::placeholder {
+    color: var(--text-muted);
+  }
+
+  .input-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all var(--transition);
+    flex-shrink: 0;
+  }
+
+  .input-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-card);
+  }
+
+  .input-btn.send {
+    color: var(--accent);
+  }
+
+  .input-btn.send:hover {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .input-btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Right Panel */
+  .right-panel {
+    width: var(--right-panel-width);
+    min-width: var(--right-panel-width);
+    background: var(--bg-sidebar);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.3s ease, min-width 0.3s ease, opacity 0.3s ease;
+  }
+
+  .right-panel.collapsed {
+    width: 0;
+    min-width: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .panel-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    min-height: 44px;
+  }
+
+  .panel-tab {
+    flex: 1;
+    padding: 10px 12px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all var(--transition);
+  }
+
+  .panel-tab:hover { color: var(--text-primary); }
+
+  .panel-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .panel-collapse-btn {
+    width: 40px;
+    min-width: 40px;
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition);
+  }
+
+  .panel-collapse-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-card);
+  }
+
+  .panel-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+  }
+
+  .panel-section {
+    display: none;
+  }
+
+  .panel-section.active {
+    display: block;
+  }
+
+  .panel-message {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .panel-message a {
+    color: var(--accent);
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .panel-message a:hover { text-decoration: underline; }
+
+  /* Panel selects and inputs */
+  .panel-select,
+  .panel-input {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    margin-bottom: 12px;
+  }
+
+  .panel-select:focus,
+  .panel-input:focus {
+    border-color: var(--accent);
+  }
+
+  .panel-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  /* File tree */
+  .file-tree {
+    font-size: 13px;
+  }
+
+  .file-tree-item {
+    padding: 4px 8px;
+    cursor: pointer;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background var(--transition);
+  }
+
+  .file-tree-item:hover {
+    background: var(--bg-card);
+  }
+
+  .file-tree-item .icon {
+    font-size: 14px;
+    width: 18px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .file-tree-item .name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .file-tree-children {
+    padding-left: 16px;
+    display: none;
+  }
+
+  .file-tree-children.open { display: block; }
+
+  .file-viewer {
+    display: none;
+    margin-top: 12px;
+  }
+
+  .file-viewer.show { display: block; }
+
+  .file-viewer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .file-viewer-path {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: monospace;
+  }
+
+  .file-viewer-content {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    max-height: 300px;
+    overflow: auto;
+    font-size: 12px;
+    font-family: 'SF Mono', monospace;
+    white-space: pre-wrap;
+    color: var(--text-primary);
+    line-height: 1.5;
+  }
+
+  /* Issues list */
+  .issues-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 12px;
+  }
+
+  .issue-item {
+    padding: 8px 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: border-color var(--transition);
+  }
+
+  .issue-item:hover {
+    border-color: var(--text-muted);
+  }
+
+  .issue-title {
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  .issue-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .badge-open {
+    background: rgba(63, 185, 80, 0.15);
+    color: var(--green);
+  }
+
+  .badge-closed {
+    background: rgba(188, 140, 255, 0.15);
+    color: var(--purple);
+  }
+
+  .badge-urgent {
+    background: rgba(248, 81, 73, 0.15);
+    color: var(--red);
+  }
+
+  .badge-high {
+    background: rgba(210, 153, 34, 0.15);
+    color: var(--orange);
+  }
+
+  .badge-normal {
+    background: rgba(88, 166, 255, 0.15);
+    color: var(--accent);
+  }
+
+  .badge-low {
+    background: rgba(139, 148, 158, 0.15);
+    color: var(--text-secondary);
+  }
+
+  /* Create issue form */
+  .create-form {
+    display: none;
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .create-form.show { display: block; }
+
+  .create-form input,
+  .create-form textarea,
+  .create-form select {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: var(--font);
+    outline: none;
+    margin-bottom: 8px;
+  }
+
+  .create-form textarea {
+    min-height: 60px;
+    resize: vertical;
+  }
+
+  .create-form input:focus,
+  .create-form textarea:focus {
+    border-color: var(--accent);
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  /* Settings Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+
+  .modal-overlay.show {
+    display: flex;
+  }
+
+  .modal {
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    width: 440px;
+    max-width: 90vw;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .modal-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .modal-close {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    font-size: 18px;
+    transition: all var(--transition);
+  }
+
+  .modal-close:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+  }
+
+  .modal-body {
+    padding: 20px;
+  }
+
+  .form-group {
+    margin-bottom: 16px;
+  }
+
+  .form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 6px;
+    color: var(--text-primary);
+  }
+
+  .input-with-toggle {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .input-with-toggle input {
+    width: 100%;
+    padding: 8px 36px 8px 12px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: var(--font);
+    outline: none;
+  }
+
+  .input-with-toggle input:focus {
+    border-color: var(--accent);
+  }
+
+  .toggle-vis {
+    position: absolute;
+    right: 4px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .toggle-vis:hover { color: var(--text-secondary); }
+
+  .form-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+  }
+
+  .test-result {
+    font-size: 12px;
+    margin-top: 4px;
+    min-height: 18px;
+  }
+
+  .test-result.success { color: var(--green); }
+  .test-result.error { color: var(--red); }
+
+  .modal-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  /* Empty state */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 40px;
+  }
+
+  .empty-state .icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+  }
+
+  .empty-state h3 {
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+
+  .empty-state p {
+    font-size: 13px;
+    max-width: 300px;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Expand toggle for right panel */
+  .expand-panel-btn {
+    display: none;
+    position: fixed;
+    right: 12px;
+    top: 12px;
+    z-index: 50;
+    padding: 8px 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .expand-panel-btn:hover {
+    background: var(--bg-sidebar);
+    color: var(--text-primary);
+  }
+
+  .right-panel.collapsed ~ .expand-panel-btn {
+    display: flex;
+  }
+
+  /* File upload */
+  .file-upload-input {
+    display: none;
+  }
+
+  .file-upload-preview {
+    display: none;
+    padding: 6px 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .file-upload-preview.show {
+    display: flex;
+  }
+
+  .file-upload-preview .remove-file {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0;
+    margin-left: auto;
+  }
+
+  .file-upload-preview .remove-file:hover {
+    color: var(--red);
+  }
+
+  /* Mobile responsive */
+  @media (max-width: 768px) {
+    .sidebar {
+      display: none;
+    }
+
+    .right-panel {
+      display: none;
+    }
+
+    .expand-panel-btn { display: none !important; }
+
+    .chat-area {
+      width: 100%;
+    }
+
+    .message { max-width: 90%; }
+  }
+
+  @media (max-width: 1100px) {
+    .right-panel:not(.collapsed) {
+      width: 280px;
+      min-width: 280px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Left Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="icon">&#129302;</span>
+      <span>Letta Agents</span>
+    </div>
+    <div class="sidebar-search">
+      <input type="text" id="agentSearch" placeholder="Search agents..." />
+    </div>
+    <div class="agent-list" id="agentList">
+      <div class="empty-state" style="height: auto; padding: 24px;">
+        <div class="spinner"></div>
+        <p style="margin-top: 12px;">Loading agents...</p>
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <button class="settings-btn" id="openSettings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </button>
+    </div>
+  </aside>
+
+  <!-- Center - Chat Area -->
+  <main class="chat-area">
+    <div class="chat-header" id="chatHeader">
+      <div class="chat-header-info">
+        <div class="chat-header-name" id="chatHeaderName">Select an Agent</div>
+        <div class="chat-header-desc" id="chatHeaderDesc">Choose an agent from the sidebar to start chatting</div>
+      </div>
+      <div class="chat-header-actions">
+        <select class="conv-select" id="convSelect" title="Conversations">
+          <option value="">New conversation</option>
+        </select>
+        <button class="btn btn-ghost" id="newChatBtn">New Chat</button>
+      </div>
+    </div>
+
+    <div class="messages" id="messages">
+      <div class="empty-state">
+        <div class="icon">&#128172;</div>
+        <h3>Start a conversation</h3>
+        <p>Select an agent and send a message to begin.</p>
+      </div>
+    </div>
+
+    <div class="chat-input-area">
+      <div class="file-upload-preview" id="filePreview">
+        <span>&#128206;</span>
+        <span id="filePreviewName"></span>
+        <button class="remove-file" id="removeFile" title="Remove file">&times;</button>
+      </div>
+      <div class="chat-input-wrapper">
+        <label class="input-btn" for="fileUpload" title="Attach file">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          <input type="file" id="fileUpload" class="file-upload-input" />
+        </label>
+        <textarea id="chatInput" placeholder="Type a message..." rows="1" disabled></textarea>
+        <button class="input-btn send" id="sendBtn" title="Send message" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Right Panel -->
+  <aside class="right-panel" id="rightPanel">
+    <div class="panel-tabs">
+      <button class="panel-tab active" data-panel="github">GitHub</button>
+      <button class="panel-tab" data-panel="linear">Linear</button>
+      <button class="panel-collapse-btn" id="collapsePanel" title="Collapse panel">&#10095;</button>
+    </div>
+    <div class="panel-content">
+      <!-- GitHub Section -->
+      <div class="panel-section active" id="panel-github">
+        <div id="githubNoToken" class="panel-message">
+          <p>Configure your GitHub token in <a id="ghSettingsLink">Settings</a> to browse repositories.</p>
+        </div>
+        <div id="githubContent" style="display:none;">
+          <label class="panel-label">Repository</label>
+          <select class="panel-select" id="ghRepoSelect">
+            <option value="">Select repository...</option>
+          </select>
+
+          <div id="ghFileSection" style="display:none;">
+            <label class="panel-label">Files</label>
+            <div class="file-tree" id="ghFileTree"></div>
+            <div class="file-viewer" id="ghFileViewer">
+              <div class="file-viewer-header">
+                <span class="file-viewer-path" id="ghFilePath"></span>
+                <button class="btn" id="ghSendToAgent" style="font-size:11px;padding:4px 10px;">Send to Agent</button>
+              </div>
+              <div class="file-viewer-content" id="ghFileContent"></div>
+            </div>
+          </div>
+
+          <div style="margin-top:16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <label class="panel-label" style="margin-bottom:0;">Issues</label>
+              <button class="btn btn-ghost" id="ghCreateIssueBtn" style="font-size:11px;padding:4px 10px;">Create Issue</button>
+            </div>
+            <div class="create-form" id="ghCreateIssueForm">
+              <input type="text" id="ghIssueTitle" placeholder="Issue title" />
+              <textarea id="ghIssueBody" placeholder="Description..."></textarea>
+              <div class="form-actions">
+                <button class="btn btn-ghost" id="ghCancelIssue" style="font-size:12px;">Cancel</button>
+                <button class="btn" id="ghSubmitIssue" style="font-size:12px;">Create</button>
+              </div>
+            </div>
+            <div class="issues-list" id="ghIssuesList"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Linear Section -->
+      <div class="panel-section" id="panel-linear">
+        <div id="linearNoToken" class="panel-message">
+          <p>Configure your Linear API key in <a id="lnSettingsLink">Settings</a> to view issues.</p>
+        </div>
+        <div id="linearContent" style="display:none;">
+          <label class="panel-label">Team</label>
+          <select class="panel-select" id="lnTeamSelect">
+            <option value="">Select team...</option>
+          </select>
+
+          <label class="panel-label">Search Issues</label>
+          <input type="text" class="panel-input" id="lnSearch" placeholder="Search..." />
+
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">
+            <label class="panel-label" style="margin-bottom:0;">Issues</label>
+            <button class="btn btn-ghost" id="lnCreateIssueBtn" style="font-size:11px;padding:4px 10px;">Create Issue</button>
+          </div>
+
+          <div class="create-form" id="lnCreateIssueForm">
+            <input type="text" id="lnIssueTitle" placeholder="Issue title" />
+            <textarea id="lnIssueBody" placeholder="Description..."></textarea>
+            <div class="form-actions">
+              <button class="btn btn-ghost" id="lnCancelIssue" style="font-size:12px;">Cancel</button>
+              <button class="btn" id="lnSubmitIssue" style="font-size:12px;">Create</button>
+            </div>
+          </div>
+
+          <div class="issues-list" id="lnIssuesList"></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <button class="expand-panel-btn" id="expandPanel" title="Show integrations panel">&#9776; Integrations</button>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Settings</h2>
+      <button class="modal-close" id="closeSettings">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>GitHub Token</label>
+        <div class="input-with-toggle">
+          <input type="password" id="settingsGhToken" placeholder="ghp_xxxxxxxxxxxx" />
+          <button class="toggle-vis" data-target="settingsGhToken" title="Toggle visibility">&#128065;</button>
+        </div>
+        <div class="form-row">
+          <button class="btn btn-ghost" id="testGhBtn" style="font-size:12px;">Test Connection</button>
+          <div class="test-result" id="ghTestResult"></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Linear API Key</label>
+        <div class="input-with-toggle">
+          <input type="password" id="settingsLnKey" placeholder="lin_api_xxxxxxxxxxxx" />
+          <button class="toggle-vis" data-target="settingsLnKey" title="Toggle visibility">&#128065;</button>
+        </div>
+        <div class="form-row">
+          <button class="btn btn-ghost" id="testLnBtn" style="font-size:12px;">Test Connection</button>
+          <div class="test-result" id="lnTestResult"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="cancelSettings">Cancel</button>
+      <button class="btn" id="saveSettings">Save Settings</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ============================================================
+  // State
+  // ============================================================
+  var state = {
+    agents: [],
+    selectedAgent: null,
+    conversationId: null,
+    conversations: {},
+    messageHistory: {},
+    isTyping: false,
+    attachedFile: null,
+    rightPanelTab: 'github',
+    ghRepos: [],
+    ghSelectedRepo: null,
+    ghFileCache: {},
+    currentFileContent: '',
+    currentFilePath: '',
+    lnTeams: [],
+    lnSelectedTeam: null
+  };
+
+  // ============================================================
+  // Helper - Retrieve tokens
+  // ============================================================
+  function getGhToken() {
+    return localStorage.getItem('githubToken') || '';
+  }
+
+  function getLnKey() {
+    return localStorage.getItem('linearApiKey') || '';
+  }
+
+  // ============================================================
+  // Simple Markdown Renderer
+  // ============================================================
+  function renderMarkdown(text) {
+    if (!text) return '';
+    var html = text;
+
+    // Escape HTML first
+    html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    // Code blocks (triple backtick) - must be done before other transforms
+    html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, function(match, lang, code) {
+      return '<pre><code>' + code.trim() + '</code></pre>';
+    });
+
+    // Inline code (single backtick) - avoid matching inside <pre>
+    html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+
+    // Bold
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+    // Headers (only at line start)
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+    html = html.replace(/^# (.+)$/gm, '<h3>$1</h3>');
+
+    // Links
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+    // List items - collect consecutive list items into <ul>
+    html = html.replace(/((?:^- .+\n?)+)/gm, function(block) {
+      var items = block.trim().split('\n').map(function(line) {
+        return '<li>' + line.replace(/^- /, '') + '</li>';
+      }).join('');
+      return '<ul>' + items + '</ul>';
+    });
+
+    // Newlines (but not inside <pre>) - convert remaining newlines
+    // Split by <pre>...</pre>, process non-pre parts
+    var parts = html.split(/(<pre>[\s\S]*?<\/pre>)/g);
+    for (var i = 0; i < parts.length; i++) {
+      if (!parts[i].match(/^<pre>/)) {
+        parts[i] = parts[i].replace(/\n/g, '<br>');
+      }
+    }
+    html = parts.join('');
+
+    return html;
+  }
+
+  // ============================================================
+  // Time formatter
+  // ============================================================
+  function formatTime(date) {
+    var d = date || new Date();
+    var h = d.getHours().toString().padStart(2, '0');
+    var m = d.getMinutes().toString().padStart(2, '0');
+    return h + ':' + m;
+  }
+
+  // ============================================================
+  // API calls
+  // ============================================================
+  function api(method, url, body) {
+    var opts = {
+      method: method,
+      headers: { 'Content-Type': 'application/json' }
+    };
+    if (body) {
+      opts.body = JSON.stringify(body);
+    }
+    return fetch(url, opts).then(function(res) {
+      if (!res.ok) {
+        return res.text().then(function(t) {
+          throw new Error('HTTP ' + res.status + ': ' + t);
+        });
+      }
+      return res.json();
+    });
+  }
+
+  // ============================================================
+  // DOM refs
+  // ============================================================
+  var dom = {
+    agentSearch: document.getElementById('agentSearch'),
+    agentList: document.getElementById('agentList'),
+    chatHeaderName: document.getElementById('chatHeaderName'),
+    chatHeaderDesc: document.getElementById('chatHeaderDesc'),
+    convSelect: document.getElementById('convSelect'),
+    newChatBtn: document.getElementById('newChatBtn'),
+    messages: document.getElementById('messages'),
+    chatInput: document.getElementById('chatInput'),
+    sendBtn: document.getElementById('sendBtn'),
+    fileUpload: document.getElementById('fileUpload'),
+    filePreview: document.getElementById('filePreview'),
+    filePreviewName: document.getElementById('filePreviewName'),
+    removeFile: document.getElementById('removeFile'),
+    rightPanel: document.getElementById('rightPanel'),
+    collapsePanel: document.getElementById('collapsePanel'),
+    expandPanel: document.getElementById('expandPanel'),
+    settingsModal: document.getElementById('settingsModal'),
+    openSettings: document.getElementById('openSettings'),
+    closeSettings: document.getElementById('closeSettings'),
+    cancelSettings: document.getElementById('cancelSettings'),
+    saveSettings: document.getElementById('saveSettings'),
+    settingsGhToken: document.getElementById('settingsGhToken'),
+    settingsLnKey: document.getElementById('settingsLnKey'),
+    testGhBtn: document.getElementById('testGhBtn'),
+    testLnBtn: document.getElementById('testLnBtn'),
+    ghTestResult: document.getElementById('ghTestResult'),
+    lnTestResult: document.getElementById('lnTestResult'),
+    ghRepoSelect: document.getElementById('ghRepoSelect'),
+    ghFileSection: document.getElementById('ghFileSection'),
+    ghFileTree: document.getElementById('ghFileTree'),
+    ghFileViewer: document.getElementById('ghFileViewer'),
+    ghFilePath: document.getElementById('ghFilePath'),
+    ghFileContent: document.getElementById('ghFileContent'),
+    ghSendToAgent: document.getElementById('ghSendToAgent'),
+    ghIssuesList: document.getElementById('ghIssuesList'),
+    ghCreateIssueBtn: document.getElementById('ghCreateIssueBtn'),
+    ghCreateIssueForm: document.getElementById('ghCreateIssueForm'),
+    ghCancelIssue: document.getElementById('ghCancelIssue'),
+    ghSubmitIssue: document.getElementById('ghSubmitIssue'),
+    ghSettingsLink: document.getElementById('ghSettingsLink'),
+    lnTeamSelect: document.getElementById('lnTeamSelect'),
+    lnSearch: document.getElementById('lnSearch'),
+    lnIssuesList: document.getElementById('lnIssuesList'),
+    lnCreateIssueBtn: document.getElementById('lnCreateIssueBtn'),
+    lnCreateIssueForm: document.getElementById('lnCreateIssueForm'),
+    lnCancelIssue: document.getElementById('lnCancelIssue'),
+    lnSubmitIssue: document.getElementById('lnSubmitIssue'),
+    lnSettingsLink: document.getElementById('lnSettingsLink'),
+    githubNoToken: document.getElementById('githubNoToken'),
+    githubContent: document.getElementById('githubContent'),
+    linearNoToken: document.getElementById('linearNoToken'),
+    linearContent: document.getElementById('linearContent')
+  };
+
+  // ============================================================
+  // Agent categories
+  // ============================================================
+  var categories = [
+    { name: 'Call Center', keywords: ['call'] },
+    { name: 'Business', keywords: ['business', 'finance', 'marketing', 'hr', 'onboarding'] },
+    { name: 'Development', keywords: ['code', 'devops', 'repo', 'security', 'data-ml', 'qa'] },
+    { name: 'Personal', keywords: ['wingman', 'winggirl', 'berater', 'prof', 'tech', 'builder'] },
+    { name: 'Workflow', keywords: ['automation', 'workflow'] }
+  ];
+
+  function categorizeAgent(agent) {
+    var id = (agent.id || agent.name || '').toLowerCase();
+    for (var i = 0; i < categories.length; i++) {
+      for (var j = 0; j < categories[i].keywords.length; j++) {
+        if (id.indexOf(categories[i].keywords[j]) !== -1) {
+          return categories[i].name;
+        }
+      }
+    }
+    return 'Other';
+  }
+
+  // ============================================================
+  // Render agent list
+  // ============================================================
+  function renderAgentList(filter) {
+    var filterLower = (filter || '').toLowerCase();
+    var agents = state.agents.filter(function(a) {
+      if (!filterLower) return true;
+      var name = (a.name || '').toLowerCase();
+      var desc = (a.description || '').toLowerCase();
+      var id = (a.id || '').toLowerCase();
+      return name.indexOf(filterLower) !== -1 ||
+             desc.indexOf(filterLower) !== -1 ||
+             id.indexOf(filterLower) !== -1;
+    });
+
+    // Group by category
+    var groups = {};
+    agents.forEach(function(a) {
+      var cat = categorizeAgent(a);
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(a);
+    });
+
+    // Category order
+    var order = ['Call Center', 'Business', 'Development', 'Personal', 'Workflow', 'Other'];
+    var html = '';
+
+    order.forEach(function(catName) {
+      if (!groups[catName] || groups[catName].length === 0) return;
+      html += '<div class="agent-group-title">' + catName + '</div>';
+      groups[catName].forEach(function(a) {
+        var isActive = state.selectedAgent && state.selectedAgent.id === a.id;
+        var desc = a.description || 'No description';
+        if (desc.length > 60) desc = desc.substring(0, 57) + '...';
+        html += '<div class="agent-item' + (isActive ? ' active' : '') + '" data-agent-id="' + escapeAttr(a.id) + '">';
+        html += '<span class="agent-name">' + escapeHtml(a.name || a.id) + '</span>';
+        html += '<span class="agent-desc">' + escapeHtml(desc) + '</span>';
+        html += '</div>';
+      });
+    });
+
+    if (!html) {
+      html = '<div class="panel-message"><p>No agents found.</p></div>';
+    }
+
+    dom.agentList.innerHTML = html;
+  }
+
+  function escapeHtml(str) {
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(str));
+    return d.innerHTML;
+  }
+
+  function escapeAttr(str) {
+    return str.replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // ============================================================
+  // Select an agent
+  // ============================================================
+  function selectAgent(agentId) {
+    var agent = state.agents.find(function(a) { return a.id === agentId; });
+    if (!agent) return;
+
+    state.selectedAgent = agent;
+    state.conversationId = null;
+    localStorage.setItem('selectedAgent', agentId);
+
+    dom.chatHeaderName.textContent = agent.name || agent.id;
+    dom.chatHeaderDesc.textContent = agent.description || '';
+    dom.chatInput.disabled = false;
+    dom.sendBtn.disabled = false;
+    dom.chatInput.placeholder = 'Message ' + (agent.name || agent.id) + '...';
+
+    renderAgentList(dom.agentSearch.value);
+    loadConversations(agentId);
+    clearMessages();
+  }
+
+  // ============================================================
+  // Conversations
+  // ============================================================
+  function loadConversations(agentId) {
+    dom.convSelect.innerHTML = '<option value="">New conversation</option>';
+
+    api('GET', '/api/agents/' + encodeURIComponent(agentId) + '/conversations')
+      .then(function(data) {
+        if (data && data.conversations) {
+          data.conversations.forEach(function(c) {
+            var opt = document.createElement('option');
+            opt.value = c.id || c.conversationId || '';
+            opt.textContent = c.title || ('Conversation ' + (c.id || '').substring(0, 8));
+            dom.convSelect.appendChild(opt);
+          });
+        }
+      })
+      .catch(function() {
+        // Conversations endpoint may not exist, that's ok
+      });
+  }
+
+  // ============================================================
+  // Messages
+  // ============================================================
+  function clearMessages() {
+    var key = state.selectedAgent ? state.selectedAgent.id : null;
+    if (key && state.conversationId && state.messageHistory[key + ':' + state.conversationId]) {
+      renderMessages(state.messageHistory[key + ':' + state.conversationId]);
+    } else {
+      dom.messages.innerHTML =
+        '<div class="empty-state">' +
+        '<div class="icon">&#128172;</div>' +
+        '<h3>Start a conversation</h3>' +
+        '<p>Send a message to ' + escapeHtml(state.selectedAgent ? state.selectedAgent.name : 'the agent') + '.</p>' +
+        '</div>';
+    }
+  }
+
+  function renderMessages(msgs) {
+    var html = '';
+    msgs.forEach(function(m) {
+      html += buildMessageHtml(m.role, m.content, m.time, m.toolsUsed);
+    });
+    dom.messages.innerHTML = html;
+    scrollToBottom();
+  }
+
+  function buildMessageHtml(role, content, time, toolsUsed) {
+    var cls = role === 'user' ? 'user' : 'assistant';
+    var rendered = role === 'user' ? escapeHtml(content) : renderMarkdown(content);
+    var toolsHtml = '';
+
+    if (toolsUsed && toolsUsed.length > 0) {
+      var toolId = 'tools-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
+      toolsHtml = '<div class="tools-used">' +
+        '<button class="tools-toggle" data-tools-id="' + toolId + '">' +
+        '<span class="arrow">&#9654;</span> Tools used (' + toolsUsed.length + ')' +
+        '</button>' +
+        '<div class="tools-details" id="' + toolId + '">';
+      toolsUsed.forEach(function(t) {
+        var name = typeof t === 'string' ? t : (t.name || t.tool || 'unknown');
+        var result = (typeof t === 'object' && t.result) ? ': ' + escapeHtml(String(t.result).substring(0, 200)) : '';
+        toolsHtml += '<div class="tool-item"><span class="tool-name">' + escapeHtml(name) + '</span>' + result + '</div>';
+      });
+      toolsHtml += '</div></div>';
+    }
+
+    return '<div class="message ' + cls + '">' +
+      '<div class="message-bubble">' + rendered + '</div>' +
+      toolsHtml +
+      '<span class="message-time">' + (time || formatTime()) + '</span>' +
+      '</div>';
+  }
+
+  function addMessage(role, content, toolsUsed) {
+    // Remove empty state
+    var empty = dom.messages.querySelector('.empty-state');
+    if (empty) empty.remove();
+
+    var time = formatTime();
+    var msgObj = { role: role, content: content, time: time, toolsUsed: toolsUsed };
+
+    // Store in history
+    if (state.selectedAgent) {
+      var key = state.selectedAgent.id + ':' + (state.conversationId || 'new');
+      if (!state.messageHistory[key]) state.messageHistory[key] = [];
+      state.messageHistory[key].push(msgObj);
+    }
+
+    dom.messages.insertAdjacentHTML('beforeend', buildMessageHtml(role, content, time, toolsUsed));
+    scrollToBottom();
+  }
+
+  function showTyping() {
+    state.isTyping = true;
+    var empty = dom.messages.querySelector('.empty-state');
+    if (empty) empty.remove();
+
+    dom.messages.insertAdjacentHTML('beforeend',
+      '<div class="typing" id="typingIndicator">' +
+      '<div class="typing-dots"><span></span><span></span><span></span></div>' +
+      'thinking...' +
+      '</div>');
+    scrollToBottom();
+  }
+
+  function hideTyping() {
+    state.isTyping = false;
+    var el = document.getElementById('typingIndicator');
+    if (el) el.remove();
+  }
+
+  function scrollToBottom() {
+    dom.messages.scrollTop = dom.messages.scrollHeight;
+  }
+
+  // ============================================================
+  // Send message
+  // ============================================================
+  function sendMessage() {
+    if (!state.selectedAgent) return;
+    var text = dom.chatInput.value.trim();
+    if (!text && !state.attachedFile) return;
+
+    var fullMessage = text;
+    if (state.attachedFile) {
+      fullMessage = (text ? text + '\n\n' : '') + '--- Attached File: ' + state.attachedFile.name + ' ---\n' + state.attachedFile.content;
+      clearAttachment();
+    }
+
+    addMessage('user', text || '[File attached]');
+    dom.chatInput.value = '';
+    dom.chatInput.style.height = 'auto';
+
+    showTyping();
+
+    var body = {
+      message: fullMessage,
+      conversationId: state.conversationId || undefined,
+      githubToken: getGhToken() || undefined,
+      linearApiKey: getLnKey() || undefined
+    };
+
+    api('POST', '/api/agents/' + encodeURIComponent(state.selectedAgent.id) + '/chat', body)
+      .then(function(data) {
+        hideTyping();
+        var resp = data.response || data.message || data.content || 'No response';
+        var tools = data.toolsUsed || data.tools_used || null;
+
+        if (data.conversationId) {
+          state.conversationId = data.conversationId;
+          // Update history key
+          var oldKey = state.selectedAgent.id + ':new';
+          var newKey = state.selectedAgent.id + ':' + state.conversationId;
+          if (state.messageHistory[oldKey]) {
+            state.messageHistory[newKey] = state.messageHistory[oldKey];
+            delete state.messageHistory[oldKey];
+          }
+        }
+
+        addMessage('assistant', resp, tools);
+      })
+      .catch(function(err) {
+        hideTyping();
+        addMessage('assistant', 'Error: ' + err.message);
+      });
+  }
+
+  // ============================================================
+  // File attachment
+  // ============================================================
+  function handleFileUpload(file) {
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      state.attachedFile = { name: file.name, content: e.target.result };
+      dom.filePreviewName.textContent = file.name;
+      dom.filePreview.classList.add('show');
+    };
+    reader.readAsText(file);
+  }
+
+  function clearAttachment() {
+    state.attachedFile = null;
+    dom.filePreview.classList.remove('show');
+    dom.fileUpload.value = '';
+  }
+
+  // ============================================================
+  // Right panel tabs
+  // ============================================================
+  function switchPanelTab(tab) {
+    state.rightPanelTab = tab;
+    document.querySelectorAll('.panel-tab').forEach(function(t) {
+      t.classList.toggle('active', t.dataset.panel === tab);
+    });
+    document.querySelectorAll('.panel-section').forEach(function(s) {
+      s.classList.toggle('active', s.id === 'panel-' + tab);
+    });
+  }
+
+  // ============================================================
+  // GitHub integration
+  // ============================================================
+  function refreshGithubPanel() {
+    var token = getGhToken();
+    if (!token) {
+      dom.githubNoToken.style.display = '';
+      dom.githubContent.style.display = 'none';
+      return;
+    }
+    dom.githubNoToken.style.display = 'none';
+    dom.githubContent.style.display = '';
+
+    loadGhRepos(token);
+  }
+
+  function loadGhRepos(token) {
+    api('GET', '/api/github/repos?token=' + encodeURIComponent(token))
+      .then(function(data) {
+        var repos = data.repos || data || [];
+        state.ghRepos = repos;
+        dom.ghRepoSelect.innerHTML = '<option value="">Select repository...</option>';
+        repos.forEach(function(r) {
+          var name = r.full_name || r.name || r;
+          var opt = document.createElement('option');
+          opt.value = typeof r === 'string' ? r : r.full_name;
+          opt.textContent = typeof r === 'string' ? r : r.full_name;
+          dom.ghRepoSelect.appendChild(opt);
+        });
+      })
+      .catch(function(err) {
+        dom.ghIssuesList.innerHTML = '<div class="panel-message"><p>Failed to load repos: ' + escapeHtml(err.message) + '</p></div>';
+      });
+  }
+
+  function loadGhFiles(repo, path) {
+    var token = getGhToken();
+    api('POST', '/api/github/file', { repo: repo, path: path || '', token: token })
+      .then(function(data) {
+        if (Array.isArray(data)) {
+          renderFileTree(dom.ghFileTree, data, repo);
+          dom.ghFileSection.style.display = '';
+        } else if (data.content !== undefined) {
+          showFileViewer(data.path || path, data.content);
+        }
+      })
+      .catch(function() {
+        dom.ghFileTree.innerHTML = '<div class="panel-message"><p>Failed to load files.</p></div>';
+      });
+  }
+
+  function renderFileTree(container, items, repo) {
+    var html = '';
+    // Sort: dirs first, then files
+    var sorted = items.slice().sort(function(a, b) {
+      if (a.type === 'dir' && b.type !== 'dir') return -1;
+      if (a.type !== 'dir' && b.type === 'dir') return 1;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+
+    sorted.forEach(function(item) {
+      var isDir = item.type === 'dir';
+      var icon = isDir ? '&#128193;' : '&#128196;';
+      html += '<div class="file-tree-item" data-path="' + escapeAttr(item.path || item.name) + '" data-type="' + (isDir ? 'dir' : 'file') + '" data-repo="' + escapeAttr(repo) + '">';
+      html += '<span class="icon">' + icon + '</span>';
+      html += '<span class="name">' + escapeHtml(item.name) + '</span>';
+      html += '</div>';
+      if (isDir) {
+        html += '<div class="file-tree-children" data-dir-path="' + escapeAttr(item.path || item.name) + '"></div>';
+      }
+    });
+    container.innerHTML = html;
+  }
+
+  function showFileViewer(path, content) {
+    state.currentFilePath = path;
+    state.currentFileContent = content;
+    dom.ghFilePath.textContent = path;
+    dom.ghFileContent.textContent = content;
+    dom.ghFileViewer.classList.add('show');
+  }
+
+  function loadGhIssues(repo) {
+    var token = getGhToken();
+    api('GET', '/api/github/repos?token=' + encodeURIComponent(token) + '&repo=' + encodeURIComponent(repo) + '&type=issues')
+      .then(function(data) {
+        var issues = data.issues || data || [];
+        var html = '';
+        if (issues.length === 0) {
+          html = '<div class="panel-message"><p>No issues found.</p></div>';
+        }
+        issues.forEach(function(iss) {
+          var stateClass = iss.state === 'open' ? 'badge-open' : 'badge-closed';
+          html += '<div class="issue-item">';
+          html += '<div class="issue-title">#' + (iss.number || '') + ' ' + escapeHtml(iss.title || '') + '</div>';
+          html += '<div class="issue-meta">';
+          html += '<span class="badge ' + stateClass + '">' + (iss.state || 'open') + '</span>';
+          if (iss.user) html += '<span>' + escapeHtml(iss.user.login || iss.user) + '</span>';
+          html += '</div></div>';
+        });
+        dom.ghIssuesList.innerHTML = html;
+      })
+      .catch(function() {
+        dom.ghIssuesList.innerHTML = '<div class="panel-message"><p>Failed to load issues.</p></div>';
+      });
+  }
+
+  // ============================================================
+  // Linear integration
+  // ============================================================
+  function refreshLinearPanel() {
+    var key = getLnKey();
+    if (!key) {
+      dom.linearNoToken.style.display = '';
+      dom.linearContent.style.display = 'none';
+      return;
+    }
+    dom.linearNoToken.style.display = 'none';
+    dom.linearContent.style.display = '';
+
+    loadLnTeams(key);
+  }
+
+  function loadLnTeams(apiKey) {
+    api('POST', '/api/linear/teams', { apiKey: apiKey })
+      .then(function(data) {
+        var teams = data.teams || data || [];
+        state.lnTeams = teams;
+        dom.lnTeamSelect.innerHTML = '<option value="">Select team...</option>';
+        teams.forEach(function(t) {
+          var opt = document.createElement('option');
+          opt.value = t.id;
+          opt.textContent = t.name || t.id;
+          dom.lnTeamSelect.appendChild(opt);
+        });
+      })
+      .catch(function() {
+        dom.lnIssuesList.innerHTML = '<div class="panel-message"><p>Failed to load teams.</p></div>';
+      });
+  }
+
+  function loadLnIssues(teamId, search) {
+    var apiKey = getLnKey();
+    var body = { apiKey: apiKey, teamId: teamId };
+    if (search) body.search = search;
+
+    api('POST', '/api/linear/issues', body)
+      .then(function(data) {
+        var issues = data.issues || data || [];
+        var html = '';
+        if (issues.length === 0) {
+          html = '<div class="panel-message"><p>No issues found.</p></div>';
+        }
+        issues.forEach(function(iss) {
+          var priorityClass = 'badge-normal';
+          var priorityLabel = 'Normal';
+          if (iss.priority === 1) { priorityClass = 'badge-urgent'; priorityLabel = 'Urgent'; }
+          else if (iss.priority === 2) { priorityClass = 'badge-high'; priorityLabel = 'High'; }
+          else if (iss.priority === 4) { priorityClass = 'badge-low'; priorityLabel = 'Low'; }
+
+          var stateLabel = (iss.state && iss.state.name) ? iss.state.name : (iss.state || '');
+          var stateBadge = 'badge-open';
+          if (stateLabel.toLowerCase().indexOf('done') !== -1 || stateLabel.toLowerCase().indexOf('closed') !== -1 || stateLabel.toLowerCase().indexOf('completed') !== -1) {
+            stateBadge = 'badge-closed';
+          }
+
+          html += '<div class="issue-item">';
+          html += '<div class="issue-title">' + escapeHtml(iss.identifier || '') + ' ' + escapeHtml(iss.title || '') + '</div>';
+          html += '<div class="issue-meta">';
+          html += '<span class="badge ' + stateBadge + '">' + escapeHtml(stateLabel) + '</span>';
+          html += '<span class="badge ' + priorityClass + '">' + priorityLabel + '</span>';
+          if (iss.assignee) html += '<span>' + escapeHtml(iss.assignee.name || iss.assignee) + '</span>';
+          html += '</div></div>';
+        });
+        dom.lnIssuesList.innerHTML = html;
+      })
+      .catch(function() {
+        dom.lnIssuesList.innerHTML = '<div class="panel-message"><p>Failed to load issues.</p></div>';
+      });
+  }
+
+  // ============================================================
+  // Settings
+  // ============================================================
+  function openSettingsModal() {
+    dom.settingsGhToken.value = getGhToken();
+    dom.settingsLnKey.value = getLnKey();
+    dom.ghTestResult.textContent = '';
+    dom.ghTestResult.className = 'test-result';
+    dom.lnTestResult.textContent = '';
+    dom.lnTestResult.className = 'test-result';
+    dom.settingsModal.classList.add('show');
+  }
+
+  function closeSettingsModal() {
+    dom.settingsModal.classList.remove('show');
+  }
+
+  function saveSettingsAction() {
+    var ghToken = dom.settingsGhToken.value.trim();
+    var lnKey = dom.settingsLnKey.value.trim();
+
+    localStorage.setItem('githubToken', ghToken);
+    localStorage.setItem('linearApiKey', lnKey);
+
+    // Also send to server
+    api('POST', '/api/settings', { githubToken: ghToken, linearApiKey: lnKey })
+      .catch(function() {
+        // Settings endpoint may not exist, tokens still saved locally
+      });
+
+    closeSettingsModal();
+    refreshGithubPanel();
+    refreshLinearPanel();
+  }
+
+  function testGhConnection() {
+    var token = dom.settingsGhToken.value.trim();
+    if (!token) {
+      dom.ghTestResult.textContent = 'Please enter a token';
+      dom.ghTestResult.className = 'test-result error';
+      return;
+    }
+    dom.ghTestResult.innerHTML = '<span class="spinner"></span>';
+    dom.ghTestResult.className = 'test-result';
+
+    api('GET', '/api/github/repos?token=' + encodeURIComponent(token))
+      .then(function() {
+        dom.ghTestResult.textContent = 'Connected successfully!';
+        dom.ghTestResult.className = 'test-result success';
+      })
+      .catch(function(err) {
+        dom.ghTestResult.textContent = 'Failed: ' + err.message;
+        dom.ghTestResult.className = 'test-result error';
+      });
+  }
+
+  function testLnConnection() {
+    var key = dom.settingsLnKey.value.trim();
+    if (!key) {
+      dom.lnTestResult.textContent = 'Please enter an API key';
+      dom.lnTestResult.className = 'test-result error';
+      return;
+    }
+    dom.lnTestResult.innerHTML = '<span class="spinner"></span>';
+    dom.lnTestResult.className = 'test-result';
+
+    api('POST', '/api/linear/teams', { apiKey: key })
+      .then(function() {
+        dom.lnTestResult.textContent = 'Connected successfully!';
+        dom.lnTestResult.className = 'test-result success';
+      })
+      .catch(function(err) {
+        dom.lnTestResult.textContent = 'Failed: ' + err.message;
+        dom.lnTestResult.className = 'test-result error';
+      });
+  }
+
+  // ============================================================
+  // Event listeners
+  // ============================================================
+
+  // Agent search
+  dom.agentSearch.addEventListener('input', function() {
+    renderAgentList(this.value);
+  });
+
+  // Agent selection (event delegation)
+  dom.agentList.addEventListener('click', function(e) {
+    var item = e.target.closest('.agent-item');
+    if (item) {
+      selectAgent(item.dataset.agentId);
+    }
+  });
+
+  // Conversation select
+  dom.convSelect.addEventListener('change', function() {
+    state.conversationId = this.value || null;
+    clearMessages();
+  });
+
+  // New chat
+  dom.newChatBtn.addEventListener('click', function() {
+    state.conversationId = null;
+    dom.convSelect.value = '';
+    clearMessages();
+  });
+
+  // Chat input auto-resize
+  dom.chatInput.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+  });
+
+  // Send message: Enter (no shift)
+  dom.chatInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // Send button
+  dom.sendBtn.addEventListener('click', sendMessage);
+
+  // File upload
+  dom.fileUpload.addEventListener('change', function() {
+    if (this.files && this.files[0]) {
+      handleFileUpload(this.files[0]);
+    }
+  });
+
+  dom.removeFile.addEventListener('click', clearAttachment);
+
+  // Right panel tabs (event delegation)
+  document.querySelector('.panel-tabs').addEventListener('click', function(e) {
+    if (e.target.classList.contains('panel-tab')) {
+      switchPanelTab(e.target.dataset.panel);
+    }
+  });
+
+  // Collapse/expand panel
+  dom.collapsePanel.addEventListener('click', function() {
+    dom.rightPanel.classList.add('collapsed');
+    dom.expandPanel.style.display = 'flex';
+  });
+
+  dom.expandPanel.addEventListener('click', function() {
+    dom.rightPanel.classList.remove('collapsed');
+    this.style.display = 'none';
+  });
+
+  // Settings modal
+  dom.openSettings.addEventListener('click', openSettingsModal);
+  dom.ghSettingsLink.addEventListener('click', openSettingsModal);
+  dom.lnSettingsLink.addEventListener('click', openSettingsModal);
+  dom.closeSettings.addEventListener('click', closeSettingsModal);
+  dom.cancelSettings.addEventListener('click', closeSettingsModal);
+  dom.saveSettings.addEventListener('click', saveSettingsAction);
+
+  // Click outside modal to close
+  dom.settingsModal.addEventListener('click', function(e) {
+    if (e.target === dom.settingsModal) closeSettingsModal();
+  });
+
+  // Toggle password visibility
+  document.querySelectorAll('.toggle-vis').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var input = document.getElementById(this.dataset.target);
+      if (input.type === 'password') {
+        input.type = 'text';
+      } else {
+        input.type = 'password';
+      }
+    });
+  });
+
+  // Test connections
+  dom.testGhBtn.addEventListener('click', testGhConnection);
+  dom.testLnBtn.addEventListener('click', testLnConnection);
+
+  // GitHub repo select
+  dom.ghRepoSelect.addEventListener('change', function() {
+    var repo = this.value;
+    state.ghSelectedRepo = repo;
+    if (repo) {
+      dom.ghFileTree.innerHTML = '<div class="panel-message"><span class="spinner"></span></div>';
+      dom.ghFileViewer.classList.remove('show');
+      loadGhFiles(repo, '');
+      loadGhIssues(repo);
+    } else {
+      dom.ghFileSection.style.display = 'none';
+      dom.ghIssuesList.innerHTML = '';
+    }
+  });
+
+  // File tree clicks (event delegation)
+  dom.ghFileTree.addEventListener('click', function(e) {
+    var item = e.target.closest('.file-tree-item');
+    if (!item) return;
+
+    var path = item.dataset.path;
+    var type = item.dataset.type;
+    var repo = item.dataset.repo;
+
+    if (type === 'dir') {
+      var children = item.nextElementSibling;
+      if (children && children.classList.contains('file-tree-children')) {
+        if (children.classList.contains('open')) {
+          children.classList.remove('open');
+        } else {
+          children.classList.add('open');
+          if (!children.innerHTML.trim()) {
+            children.innerHTML = '<div class="panel-message"><span class="spinner"></span></div>';
+            var token = getGhToken();
+            api('POST', '/api/github/file', { repo: repo, path: path, token: token })
+              .then(function(data) {
+                if (Array.isArray(data)) {
+                  renderFileTree(children, data, repo);
+                }
+              })
+              .catch(function() {
+                children.innerHTML = '<div class="panel-message"><p>Failed to load.</p></div>';
+              });
+          }
+        }
+      }
+    } else {
+      // File click
+      var token = getGhToken();
+      dom.ghFileViewer.classList.remove('show');
+      api('POST', '/api/github/file', { repo: repo, path: path, token: token })
+        .then(function(data) {
+          var content = data.content || data.data || '';
+          if (data.encoding === 'base64' && typeof atob === 'function') {
+            try { content = atob(content); } catch(ex) {}
+          }
+          showFileViewer(path, content);
+        })
+        .catch(function() {
+          showFileViewer(path, 'Failed to load file content.');
+        });
+    }
+  });
+
+  // Send file to agent
+  dom.ghSendToAgent.addEventListener('click', function() {
+    if (!state.selectedAgent || !state.currentFileContent) return;
+    var msg = 'Here is the content of `' + state.currentFilePath + '`:\n\n```\n' + state.currentFileContent + '\n```';
+    dom.chatInput.value = msg;
+    dom.chatInput.style.height = 'auto';
+    dom.chatInput.style.height = Math.min(dom.chatInput.scrollHeight, 200) + 'px';
+    dom.chatInput.focus();
+  });
+
+  // GitHub create issue toggle
+  dom.ghCreateIssueBtn.addEventListener('click', function() {
+    dom.ghCreateIssueForm.classList.toggle('show');
+  });
+  dom.ghCancelIssue.addEventListener('click', function() {
+    dom.ghCreateIssueForm.classList.remove('show');
+  });
+  dom.ghSubmitIssue.addEventListener('click', function() {
+    var title = document.getElementById('ghIssueTitle').value.trim();
+    var body = document.getElementById('ghIssueBody').value.trim();
+    if (!title) return;
+    // This would call a create-issue endpoint; for now just close the form
+    dom.ghCreateIssueForm.classList.remove('show');
+    document.getElementById('ghIssueTitle').value = '';
+    document.getElementById('ghIssueBody').value = '';
+  });
+
+  // Linear team select
+  dom.lnTeamSelect.addEventListener('change', function() {
+    state.lnSelectedTeam = this.value;
+    if (this.value) {
+      loadLnIssues(this.value);
+    } else {
+      dom.lnIssuesList.innerHTML = '';
+    }
+  });
+
+  // Linear search
+  var lnSearchTimeout;
+  dom.lnSearch.addEventListener('input', function() {
+    clearTimeout(lnSearchTimeout);
+    var val = this.value;
+    lnSearchTimeout = setTimeout(function() {
+      if (state.lnSelectedTeam) {
+        loadLnIssues(state.lnSelectedTeam, val);
+      }
+    }, 400);
+  });
+
+  // Linear create issue toggle
+  dom.lnCreateIssueBtn.addEventListener('click', function() {
+    dom.lnCreateIssueForm.classList.toggle('show');
+  });
+  dom.lnCancelIssue.addEventListener('click', function() {
+    dom.lnCreateIssueForm.classList.remove('show');
+  });
+  dom.lnSubmitIssue.addEventListener('click', function() {
+    var title = document.getElementById('lnIssueTitle').value.trim();
+    var body = document.getElementById('lnIssueBody').value.trim();
+    if (!title) return;
+    dom.lnCreateIssueForm.classList.remove('show');
+    document.getElementById('lnIssueTitle').value = '';
+    document.getElementById('lnIssueBody').value = '';
+  });
+
+  // Tools toggle (event delegation on messages)
+  dom.messages.addEventListener('click', function(e) {
+    var toggle = e.target.closest('.tools-toggle');
+    if (!toggle) return;
+    var id = toggle.dataset.toolsId;
+    var details = document.getElementById(id);
+    if (details) {
+      details.classList.toggle('show');
+      var arrow = toggle.querySelector('.arrow');
+      if (arrow) arrow.classList.toggle('open');
+    }
+  });
+
+  // Keyboard shortcut: Escape to close modal
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && dom.settingsModal.classList.contains('show')) {
+      closeSettingsModal();
+    }
+  });
+
+  // ============================================================
+  // Initialization
+  // ============================================================
+  function init() {
+    // Load agents
+    api('GET', '/api/agents')
+      .then(function(data) {
+        state.agents = data.agents || data || [];
+        renderAgentList();
+
+        // Restore selected agent
+        var savedAgent = localStorage.getItem('selectedAgent');
+        if (savedAgent) {
+          var found = state.agents.find(function(a) { return a.id === savedAgent; });
+          if (found) selectAgent(savedAgent);
+        }
+      })
+      .catch(function(err) {
+        dom.agentList.innerHTML =
+          '<div class="panel-message"><p>Failed to load agents.<br><small>' + escapeHtml(err.message) + '</small></p></div>';
+      });
+
+    // Refresh integration panels
+    refreshGithubPanel();
+    refreshLinearPanel();
+  }
+
+  init();
+
+})();
+</script>
+</body>
+</html>

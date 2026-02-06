@@ -7,13 +7,19 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./db');
 const ollama = require('./ollama-client');
+const toolExecutor = require('./tool-executor');
+const githubClient = require('./github-client');
+const linearClient = require('./linear-client');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3939', 10);
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+
+// Static files - Chat UI
+app.use(express.static(path.join(__dirname, 'public')));
 
 // In-Memory Agent-Registry
 const agents = new Map();
@@ -187,11 +193,15 @@ app.post('/api/agents/:id/chat', async (req, res) => {
     return res.status(404).json({ error: `Agent '${req.params.id}' nicht gefunden` });
   }
 
-  const { message, conversationId, options } = req.body;
+  const { message, conversationId, options, githubToken, linearApiKey } = req.body;
 
   if (!message || typeof message !== 'string' || message.trim().length === 0) {
     return res.status(400).json({ error: 'Feld "message" ist erforderlich (nicht-leerer String)' });
   }
+
+  // Tokens: aus Request-Body oder Environment
+  const ghToken = githubToken || process.env.GITHUB_TOKEN || '';
+  const lnKey = linearApiKey || process.env.LINEAR_API_KEY || '';
 
   try {
     // Conversation erstellen oder laden
@@ -227,16 +237,42 @@ app.post('/api/agents/:id/chat', async (req, res) => {
       ...history.map((m) => ({ role: m.role, content: m.content })),
     ];
 
-    // An Ollama senden
     const model = ollama.DEFAULT_MODEL;
     const temperature = agent.modelPreferences?.temperature ?? 0.7;
 
-    const ollamaResponse = await ollama.chat(model, ollamaMessages, {
-      temperature,
-      ...(options || {}),
-    });
+    // Tools verfuegbar? Dann mit Tool-Calling
+    const availableTools = toolExecutor.getAvailableTools(ghToken, lnKey);
+    let assistantMessage = '';
+    let toolsUsed = [];
+    let totalDuration = 0;
+    let evalCount = 0;
 
-    const assistantMessage = ollamaResponse.message?.content || '';
+    if (availableTools.length > 0) {
+      // Chat mit Tool-Calling-Loop
+      const result = await toolExecutor.chatWithTools(
+        ollama.client,
+        model,
+        ollamaMessages,
+        availableTools,
+        { temperature, ...(options || {}) },
+        ghToken,
+        lnKey,
+        10
+      );
+      assistantMessage = result.message;
+      toolsUsed = result.toolResults || [];
+      totalDuration = result.totalDuration || 0;
+      evalCount = result.evalCount || 0;
+    } else {
+      // Ohne Tools - normaler Chat
+      const ollamaResponse = await ollama.chat(model, ollamaMessages, {
+        temperature,
+        ...(options || {}),
+      });
+      assistantMessage = ollamaResponse.message?.content || '';
+      totalDuration = ollamaResponse.total_duration;
+      evalCount = ollamaResponse.eval_count;
+    }
 
     // Antwort speichern
     await db.addMessage(convId, 'assistant', assistantMessage);
@@ -245,14 +281,17 @@ app.post('/api/agents/:id/chat', async (req, res) => {
       response: assistantMessage,
       conversationId: convId,
       agent: agent.id,
-      model: ollamaResponse.model || model,
-      totalDuration: ollamaResponse.total_duration,
-      evalCount: ollamaResponse.eval_count,
+      model,
+      toolsUsed: toolsUsed.map((t) => ({
+        name: t.tool_call_id || 'tool',
+        content: typeof t.content === 'string' ? t.content.substring(0, 500) : '',
+      })),
+      totalDuration,
+      evalCount,
     });
   } catch (err) {
     console.error(`[Chat] Fehler bei Agent ${agent.id}:`, err.message);
 
-    // Benutzerfreundliche Fehlermeldungen
     if (err.message.includes('connection')) {
       return res.status(503).json({
         error: 'Ollama ist nicht erreichbar. Bitte spaeter erneut versuchen.',
@@ -373,6 +412,338 @@ app.get('/api/models', async (req, res) => {
   }
 });
 
+// ===================================================
+// NEW ENDPOINTS
+// ===================================================
+
+// --- SSE Streaming Chat Endpoint ---
+app.post('/api/agents/:id/chat/stream', async (req, res) => {
+  const agent = agents.get(req.params.id);
+  if (!agent) {
+    return res.status(404).json({ error: `Agent '${req.params.id}' nicht gefunden` });
+  }
+
+  const { message, conversationId, options } = req.body;
+
+  if (!message || typeof message !== 'string' || message.trim().length === 0) {
+    return res.status(400).json({ error: 'Feld "message" ist erforderlich (nicht-leerer String)' });
+  }
+
+  try {
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    // Conversation erstellen oder laden
+    let convId = conversationId;
+    let conversation;
+
+    if (convId) {
+      conversation = await db.getConversation(convId);
+      if (!conversation) {
+        res.write(`data: ${JSON.stringify({ error: `Conversation '${convId}' nicht gefunden` })}\n\n`);
+        return res.end();
+      }
+      if (conversation.agent_id !== agent.id) {
+        res.write(`data: ${JSON.stringify({ error: `Conversation '${convId}' gehoert zu Agent '${conversation.agent_id}', nicht zu '${agent.id}'` })}\n\n`);
+        return res.end();
+      }
+    } else {
+      // Neue Conversation erstellen
+      const title = message.substring(0, 100);
+      conversation = await db.createConversation(agent.id, title);
+      convId = conversation.id;
+    }
+
+    // User-Nachricht speichern
+    await db.addMessage(convId, 'user', message.trim());
+
+    // Bisherigen Verlauf laden fuer Kontext
+    const history = await db.getMessages(convId, 50);
+
+    // Messages-Array fuer Ollama zusammenbauen
+    const ollamaMessages = [
+      { role: 'system', content: agent.systemInstructions },
+      ...history.map((m) => ({ role: m.role, content: m.content })),
+    ];
+
+    // An Ollama senden
+    const model = ollama.DEFAULT_MODEL;
+    const temperature = agent.modelPreferences?.temperature ?? 0.7;
+
+    // Check if chatStream is available
+    if (typeof ollama.chatStream === 'function') {
+      // Use streaming
+      let fullMessage = '';
+
+      for await (const chunk of ollama.chatStream(model, ollamaMessages, {
+        temperature,
+        ...(options || {}),
+      })) {
+        const textChunk = chunk.message?.content || '';
+        fullMessage += textChunk;
+
+        // Send chunk as SSE
+        res.write(`data: ${JSON.stringify({ chunk: textChunk, done: false })}\n\n`);
+      }
+
+      // Save complete message to DB
+      await db.addMessage(convId, 'assistant', fullMessage);
+
+      // Send completion event
+      res.write(`data: ${JSON.stringify({
+        chunk: '',
+        done: true,
+        conversationId: convId,
+        model: model
+      })}\n\n`);
+    } else {
+      // Fallback: use non-streaming and send as single SSE event
+      const ollamaResponse = await ollama.chat(model, ollamaMessages, {
+        temperature,
+        ...(options || {}),
+      });
+
+      const assistantMessage = ollamaResponse.message?.content || '';
+
+      // Antwort speichern
+      await db.addMessage(convId, 'assistant', assistantMessage);
+
+      // Send as single chunk
+      res.write(`data: ${JSON.stringify({
+        chunk: assistantMessage,
+        done: true,
+        conversationId: convId,
+        model: ollamaResponse.model || model
+      })}\n\n`);
+    }
+
+    res.end();
+  } catch (err) {
+    console.error(`[Chat Stream] Fehler bei Agent ${agent.id}:`, err.message);
+
+    res.write(`data: ${JSON.stringify({
+      error: 'Streaming-Anfrage fehlgeschlagen',
+      details: err.message
+    })}\n\n`);
+    res.end();
+  }
+});
+
+// --- File Upload Endpoint ---
+app.post('/api/agents/:id/chat/upload', async (req, res) => {
+  const agent = agents.get(req.params.id);
+  if (!agent) {
+    return res.status(404).json({ error: `Agent '${req.params.id}' nicht gefunden` });
+  }
+
+  const { message, file, conversationId, options } = req.body;
+
+  if (!message || typeof message !== 'string' || message.trim().length === 0) {
+    return res.status(400).json({ error: 'Feld "message" ist erforderlich (nicht-leerer String)' });
+  }
+
+  if (!file || !file.name || !file.content) {
+    return res.status(400).json({ error: 'Feld "file" muss {name, content} enthalten' });
+  }
+
+  try {
+    // Decode base64 if needed
+    let fileContent = file.content;
+    if (file.type && !file.type.startsWith('text/')) {
+      try {
+        fileContent = Buffer.from(file.content, 'base64').toString('utf-8');
+      } catch (decodeErr) {
+        // If decoding fails, use as-is (might already be plain text)
+      }
+    }
+
+    // Prepend file content to message
+    const enrichedMessage = `[Datei: ${file.name}]\n\`\`\`\n${fileContent}\n\`\`\`\n\nUser: ${message.trim()}`;
+
+    // Conversation erstellen oder laden
+    let convId = conversationId;
+    let conversation;
+
+    if (convId) {
+      conversation = await db.getConversation(convId);
+      if (!conversation) {
+        return res.status(404).json({ error: `Conversation '${convId}' nicht gefunden` });
+      }
+      if (conversation.agent_id !== agent.id) {
+        return res.status(400).json({
+          error: `Conversation '${convId}' gehoert zu Agent '${conversation.agent_id}', nicht zu '${agent.id}'`,
+        });
+      }
+    } else {
+      // Neue Conversation erstellen
+      const title = `${file.name}: ${message.substring(0, 80)}`;
+      conversation = await db.createConversation(agent.id, title);
+      convId = conversation.id;
+    }
+
+    // User-Nachricht speichern (mit Datei-Kontext)
+    await db.addMessage(convId, 'user', enrichedMessage);
+
+    // Bisherigen Verlauf laden fuer Kontext
+    const history = await db.getMessages(convId, 50);
+
+    // Messages-Array fuer Ollama zusammenbauen
+    const ollamaMessages = [
+      { role: 'system', content: agent.systemInstructions },
+      ...history.map((m) => ({ role: m.role, content: m.content })),
+    ];
+
+    // An Ollama senden
+    const model = ollama.DEFAULT_MODEL;
+    const temperature = agent.modelPreferences?.temperature ?? 0.7;
+
+    const ollamaResponse = await ollama.chat(model, ollamaMessages, {
+      temperature,
+      ...(options || {}),
+    });
+
+    const assistantMessage = ollamaResponse.message?.content || '';
+
+    // Antwort speichern
+    await db.addMessage(convId, 'assistant', assistantMessage);
+
+    res.json({
+      response: assistantMessage,
+      conversationId: convId,
+      agent: agent.id,
+      model: ollamaResponse.model || model,
+      file: {
+        name: file.name,
+        processed: true,
+      },
+      totalDuration: ollamaResponse.total_duration,
+      evalCount: ollamaResponse.eval_count,
+    });
+  } catch (err) {
+    console.error(`[Chat Upload] Fehler bei Agent ${agent.id}:`, err.message);
+
+    if (err.message.includes('connection')) {
+      return res.status(503).json({
+        error: 'Ollama ist nicht erreichbar. Bitte spaeter erneut versuchen.',
+        details: err.message,
+      });
+    }
+
+    res.status(500).json({
+      error: 'Chat-Anfrage mit Datei fehlgeschlagen',
+      details: err.message,
+    });
+  }
+});
+
+
+// --- Settings Endpoint ---
+app.post('/api/settings', (req, res) => {
+  const { githubToken, linearApiKey } = req.body;
+  if (githubToken !== undefined) {
+    process.env.GITHUB_TOKEN = githubToken;
+  }
+  if (linearApiKey !== undefined) {
+    process.env.LINEAR_API_KEY = linearApiKey;
+  }
+  res.json({ success: true });
+});
+
+// --- GitHub Proxy - List Repos (via body/query token) ---
+app.get('/api/github/repos', async (req, res) => {
+  const token = req.query.token || req.headers['x-github-token'] || process.env.GITHUB_TOKEN;
+  if (!token) {
+    return res.status(503).json({ error: 'GitHub not configured' });
+  }
+  const result = await githubClient.executeFunction('github_list_repos', {}, token);
+  if (result.error) return res.status(500).json(result);
+  const repos = (result.repos || []).map((r) => ({
+    name: r.name, fullName: r.full_name, description: r.description,
+    private: r.private, url: r.html_url, language: r.language, updatedAt: r.updated_at,
+  }));
+  res.json({ count: repos.length, repos });
+});
+
+// --- GitHub Proxy - Get File ---
+app.post('/api/github/file', async (req, res) => {
+  const { repo, path: filePath, token: bodyToken } = req.body;
+  const token = bodyToken || process.env.GITHUB_TOKEN;
+  if (!token) return res.status(503).json({ error: 'GitHub not configured' });
+  if (!repo || !filePath) return res.status(400).json({ error: '"repo" and "path" required' });
+  const result = await githubClient.executeFunction('github_get_file', { repo, path: filePath }, token);
+  if (result.error) return res.status(result.error.includes('not found') ? 404 : 500).json(result);
+  res.json(result);
+});
+
+// --- GitHub Proxy - List Files (for tree browser) ---
+app.post('/api/github/files', async (req, res) => {
+  const { repo, path: dirPath, token: bodyToken } = req.body;
+  const token = bodyToken || process.env.GITHUB_TOKEN;
+  if (!token) return res.status(503).json({ error: 'GitHub not configured' });
+  if (!repo) return res.status(400).json({ error: '"repo" required' });
+  const result = await githubClient.executeFunction('github_list_files', { repo, path: dirPath || '' }, token);
+  if (result.error) return res.status(500).json(result);
+  res.json(result);
+});
+
+// --- GitHub Proxy - List Issues ---
+app.get('/api/github/issues/:repo(*)', async (req, res) => {
+  const token = req.query.token || process.env.GITHUB_TOKEN;
+  if (!token) return res.status(503).json({ error: 'GitHub not configured' });
+  const result = await githubClient.executeFunction('github_list_issues', { repo: req.params.repo, state: req.query.state || 'open' }, token);
+  if (result.error) return res.status(500).json(result);
+  res.json(result);
+});
+
+// --- GitHub Test Connection ---
+app.post('/api/github/test', async (req, res) => {
+  const token = req.body.token || process.env.GITHUB_TOKEN;
+  if (!token) return res.status(400).json({ error: 'No token provided' });
+  const result = await githubClient.executeFunction('github_list_repos', {}, token);
+  if (result.error) return res.status(401).json({ connected: false, error: result.error });
+  res.json({ connected: true, repos: (result.repos || []).length });
+});
+
+// --- Linear Proxy - List Teams ---
+app.post('/api/linear/teams', async (req, res) => {
+  const apiKey = req.body.apiKey || process.env.LINEAR_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'Linear not configured' });
+  const result = await linearClient.executeFunction('linear_list_teams', {}, apiKey);
+  if (result.error) return res.status(500).json(result);
+  res.json(result);
+});
+
+// --- Linear Proxy - List Issues ---
+app.post('/api/linear/issues', async (req, res) => {
+  const apiKey = req.body.apiKey || process.env.LINEAR_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'Linear not configured' });
+  const result = await linearClient.executeFunction('linear_list_issues', {
+    teamId: req.body.teamId, state: req.body.state, limit: req.body.limit || 50,
+  }, apiKey);
+  if (result.error) return res.status(500).json(result);
+  res.json(result);
+});
+
+// --- Linear Proxy - Search Issues ---
+app.post('/api/linear/search', async (req, res) => {
+  const apiKey = req.body.apiKey || process.env.LINEAR_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'Linear not configured' });
+  const result = await linearClient.executeFunction('linear_search_issues', { query: req.body.query }, apiKey);
+  if (result.error) return res.status(500).json(result);
+  res.json(result);
+});
+
+// --- Linear Test Connection ---
+app.post('/api/linear/test', async (req, res) => {
+  const apiKey = req.body.apiKey || process.env.LINEAR_API_KEY;
+  if (!apiKey) return res.status(400).json({ error: 'No API key provided' });
+  const result = await linearClient.executeFunction('linear_list_teams', {}, apiKey);
+  if (result.error) return res.status(401).json({ connected: false, error: result.error });
+  res.json({ connected: true, teams: Array.isArray(result) ? result.length : 0 });
+});
+
 // --- 404 Handler ---
 app.use((req, res) => {
   res.status(404).json({
@@ -382,12 +753,16 @@ app.use((req, res) => {
       'GET  /api/agents',
       'GET  /api/agents/:id',
       'POST /api/agents/:id/chat',
+      'POST /api/agents/:id/chat/stream',
+      'POST /api/agents/:id/chat/upload',
       'GET  /api/agents/:id/conversations',
       'GET  /api/agents/:id/memory',
       'POST /api/agents/:id/memory',
       'GET  /api/conversations/:id',
       'DELETE /api/conversations/:id',
       'GET  /api/models',
+      'GET  /api/github/repos',
+      'POST /api/github/file',
     ],
   });
 });
@@ -465,12 +840,16 @@ async function start() {
     console.log(`  GET  http://localhost:${PORT}/api/agents`);
     console.log(`  GET  http://localhost:${PORT}/api/agents/:id`);
     console.log(`  POST http://localhost:${PORT}/api/agents/:id/chat`);
+    console.log(`  POST http://localhost:${PORT}/api/agents/:id/chat/stream`);
+    console.log(`  POST http://localhost:${PORT}/api/agents/:id/chat/upload`);
     console.log(`  GET  http://localhost:${PORT}/api/agents/:id/conversations`);
     console.log(`  GET  http://localhost:${PORT}/api/agents/:id/memory`);
     console.log(`  POST http://localhost:${PORT}/api/agents/:id/memory`);
     console.log(`  GET  http://localhost:${PORT}/api/conversations/:id`);
     console.log(`  DEL  http://localhost:${PORT}/api/conversations/:id`);
     console.log(`  GET  http://localhost:${PORT}/api/models`);
+    console.log(`  GET  http://localhost:${PORT}/api/github/repos`);
+    console.log(`  POST http://localhost:${PORT}/api/github/file`);
     console.log('');
   });
 }
