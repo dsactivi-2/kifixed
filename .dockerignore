@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log*
+.git
+.gitignore
+.env.local
+.env.development
+.DS_Store
+*.md
+!server/
+letta-agent-mapping.json
+FIX_REPORT.md
+.omc

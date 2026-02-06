@@ -1,0 +1,120 @@
+services:
+  # -------------------------------------------------------
+  # Ollama - LLM Runtime (GLM-4 Model)
+  # -------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama-glm4
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    # GPU-Unterstuetzung (auskommentieren falls keine GPU vorhanden)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - agent-network
+
+  # -------------------------------------------------------
+  # PostgreSQL - Conversation & Memory Storage
+  # -------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: agents-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agents}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agents123}
+      POSTGRES_DB: ${POSTGRES_DB:-agent_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agents} -d ${POSTGRES_DB:-agent_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - agent-network
+
+  # -------------------------------------------------------
+  # Agent Server - Node.js Express API
+  # -------------------------------------------------------
+  agent-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent-server
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3939}:3939"
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      POSTGRES_USER: ${POSTGRES_USER:-agents}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agents123}
+      POSTGRES_DB: ${POSTGRES_DB:-agent_db}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      PORT: 3939
+      NODE_ENV: ${NODE_ENV:-production}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-glm4}
+    depends_on:
+      ollama:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Agent-Konfigurationen einbinden (read-only)
+      - ./meta-automation_OPTIMIZED_v2.json:/agents/meta-automation_OPTIMIZED_v2.json:ro
+      - ./meta-berater_OPTIMIZED_v2.json:/agents/meta-berater_OPTIMIZED_v2.json:ro
+      - ./meta-builder.json:/agents/meta-builder.json:ro
+      - ./meta-business_OPTIMIZED_v2.json:/agents/meta-business_OPTIMIZED_v2.json:ro
+      - ./meta-call-after-call_OPTIMIZED_v2.json:/agents/meta-call-after-call_OPTIMIZED_v2.json:ro
+      - ./meta-call-campaigns_OPTIMIZED_v2.json:/agents/meta-call-campaigns_OPTIMIZED_v2.json:ro
+      - ./meta-call-inbound_OPTIMIZED_v2.json:/agents/meta-call-inbound_OPTIMIZED_v2.json:ro
+      - ./meta-call-mvp_OPTIMIZED_v2.json:/agents/meta-call-mvp_OPTIMIZED_v2.json:ro
+      - ./meta-call-qa_OPTIMIZED_v2.json:/agents/meta-call-qa_OPTIMIZED_v2.json:ro
+      - ./meta-call-sales_OPTIMIZED_v2.json:/agents/meta-call-sales_OPTIMIZED_v2.json:ro
+      - ./meta-code_OPTIMIZED_v2.json:/agents/meta-code_OPTIMIZED_v2.json:ro
+      - ./meta-data-ml_OPTIMIZED_v2.json:/agents/meta-data-ml_OPTIMIZED_v2.json:ro
+      - ./meta-devops_OPTIMIZED_v2.json:/agents/meta-devops_OPTIMIZED_v2.json:ro
+      - ./meta-finance_OPTIMIZED_v2.json:/agents/meta-finance_OPTIMIZED_v2.json:ro
+      - ./meta-hr_OPTIMIZED_v2.json:/agents/meta-hr_OPTIMIZED_v2.json:ro
+      - ./meta-marketing_OPTIMIZED_v2.json:/agents/meta-marketing_OPTIMIZED_v2.json:ro
+      - ./meta-onboarding_OPTIMIZED_v2.json:/agents/meta-onboarding_OPTIMIZED_v2.json:ro
+      - ./meta-prof.json:/agents/meta-prof.json:ro
+      - ./meta-qa-upgrade-pipeline_OPTIMIZED_v2.json:/agents/meta-qa-upgrade-pipeline_OPTIMIZED_v2.json:ro
+      - ./meta-repo_OPTIMIZED_v2.json:/agents/meta-repo_OPTIMIZED_v2.json:ro
+      - ./meta-security_OPTIMIZED_v2.json:/agents/meta-security_OPTIMIZED_v2.json:ro
+      - ./meta-tech.json:/agents/meta-tech.json:ro
+      - ./meta-winggirl_OPTIMIZED_v2.json:/agents/meta-winggirl_OPTIMIZED_v2.json:ro
+      - ./meta-wingman_OPTIMIZED_v2.json:/agents/meta-wingman_OPTIMIZED_v2.json:ro
+      - ./meta-workflow_OPTIMIZED_v2.json:/agents/meta-workflow_OPTIMIZED_v2.json:ro
+    networks:
+      - agent-network
+
+volumes:
+  ollama_data:
+    driver: local
+  postgres_data:
+    driver: local
+
+networks:
+  agent-network:
+    driver: bridge
