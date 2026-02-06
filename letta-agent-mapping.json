@@ -1,66 +1,67 @@
 {
-  "uploadedAt": "2026-02-03T08:32:34.873Z",
+  "uploadedAt": "2026-02-06T10:00:00.000Z",
   "agents": [
     {
       "profileId": "meta-automation",
       "profileName": "Meta Automation",
       "lettaAgentId": "agent-f4203fb4-39e5-4796-9eea-77f4dd0f184a",
-      "version": "2.0.0",
+      "version": "3.0.0",
       "description": "Expert Workflow & Process Automation Agent. Designs and implements automated workflows, integrates APIs, creates bots, and optimizes business processes with no-code and code solutions."
     },
     {
       "profileId": "meta-berater",
       "profileName": "Meta Berater",
       "lettaAgentId": "agent-c27b23e5-16c2-4bee-bac0-a77bf1863acd",
-      "version": "2.0.0",
+      "version": "3.0.0",
       "description": "Expert Business Consulting Agent. Provides strategic advisory, problem-solving, decision support, risk assessment, and actionable recommendations based on data-driven analysis."
     },
     {
       "profileId": "meta-business",
       "profileName": "Meta Business",
       "lettaAgentId": "agent-2161b3d3-c86f-43ba-86ef-8ebf38d0e7fe",
-      "version": "2.0.0",
+      "version": "3.0.0",
       "description": "Expert Business Strategy & Development Agent. Provides strategic planning, market analysis, business model development, growth strategies, and competitive intelligence."
     },
     {
       "profileId": "meta-code",
       "profileName": "Meta Code",
       "lettaAgentId": "agent-945851e3-e167-4ae5-8aab-02664c44656f",
-      "description": "Spezialisierter Code Quality Agent für Code Review, Refactoring, Testing, Debugging, Performance Optimization und Technical Debt Management."
+      "description": "Spezialisierter Code Quality Agent für Code Review, Refactoring, Testing, Debugging, Performance Optimization und Technical Debt Management.",
+      "version": "3.0.0"
     },
     {
       "profileId": "meta-data-ml",
       "profileName": "Meta Data/ML",
       "lettaAgentId": "agent-54cae46b-5608-441e-b3e3-c7284c0c9bf9",
-      "version": "2.0.0",
+      "version": "3.0.0",
       "description": "Advanced Data Science & Machine Learning Agent. Performs data analysis, builds ML models, creates data pipelines, and implements MLOps workflows with production-ready code."
     },
     {
       "profileId": "meta-finance",
       "profileName": "Meta Finance",
       "lettaAgentId": "agent-95b46e17-5669-469a-aeee-eb56bd3a39f2",
-      "version": "2.0.0",
+      "version": "3.0.0",
       "description": "Expert Financial Analysis & Accounting Agent. Performs financial analysis, budget planning, forecasting, reporting, and ensures accounting compliance with automated workflows."
     },
     {
       "profileId": "meta-marketing",
       "profileName": "Meta Marketing",
       "lettaAgentId": "agent-fcfff152-a0de-4938-a7c3-c4f1d78bd911",
-      "version": "2.0.0",
+      "version": "3.0.0",
       "description": "Expert Marketing & Content Creation Agent. Creates engaging content, manages campaigns, optimizes SEO, handles social media, and provides data-driven marketing insights."
     },
     {
       "profileId": "meta-onboarding",
       "profileName": "Meta Onboarding",
       "lettaAgentId": "agent-fc392d3d-0d16-4445-a9fb-52015e57f1ef",
-      "version": "2.0.0",
+      "version": "3.0.0",
       "description": "Expert Onboarding & Training Agent. Creates comprehensive onboarding workflows, training materials, process documentation, and ensures smooth integration for employees, customers, and users."
     },
     {
       "profileId": "meta-repo",
       "profileName": "Meta Repo",
       "lettaAgentId": "agent-657e81c2-5e3d-4a59-902e-f580b083830d",
-      "version": "2.0.0",
+      "version": "3.0.0",
       "description": "Expert Repository Management & Git Operations Agent. Manages Git workflows, branch strategies, code reviews, CI/CD pipelines, and repository best practices across GitHub, GitLab, and Bitbucket."
     }
   ]
